@@ -1,14 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { db } from "@/db";
+import { products } from "@/db/schema";
 import { productSchema } from "@/validators/productSchema";
+import { writeFile } from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
+import path from "node:path";
 
 export async function POST(request: NextRequest) {
   try {
     const data = await request.formData();
 
     const validatedData = productSchema.safeParse({
-      ...data,
+      name: data.get("name"),
+      description: data.get("description"),
       price: Number(data.get("price")),
+      image: data.get("image"),
     });
 
     if (!validatedData.success) {
@@ -20,7 +26,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const fileName = `${Date.now()}.${validatedData.data.image.name.split(".").slice(-1)}`;
+    const fileName = `${Date.now()}.${validatedData.data.image.name
+      .split(".")
+      .slice(-1)}`;
+
+    const buffer = Buffer.from(await validatedData.data.image.arrayBuffer());
+
+    await writeFile(
+      path.join(process.cwd(), "public/assets", fileName),
+      buffer
+    );
+
+    const newProduct = await db.insert(products).values({...validatedData.data, image: fileName}).returning({id: products.id});
+
+    if (!newProduct) {
+      return NextResponse.json({
+        success: false,
+        message: "Failed to add a product",
+      });
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Product added successfully",
+        data: newProduct,
+      },
+      { status: 201 }
+    );
   } catch (error: any) {
     return NextResponse.json(
       {
