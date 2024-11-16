@@ -2,9 +2,10 @@
 import { db } from "@/db";
 import { products } from "@/db/schema";
 import { productSchema } from "@/validators/productSchema";
-import { writeFile } from "fs/promises";
+import { writeFile, unlink } from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import path from "node:path";
+import { desc } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,14 +38,14 @@ export async function POST(request: NextRequest) {
       buffer
     );
 
-    const newProduct = (
-      await db
-        .insert(products)
-        .values({ ...validatedData.data, image: fileName })
-        .returning({ id: products.id })
-    )[0];
+    const newProduct = await db
+      .insert(products)
+      .values({ ...validatedData.data, image: fileName })
+      .returning({ id: products.id });
 
     if (!newProduct) {
+      const filePath = path.join(process.cwd(), "public/assets", fileName);
+      await unlink(filePath);
       return NextResponse.json({
         success: false,
         message: "Failed to add a product",
@@ -64,6 +65,31 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: `Failed to add a product: ${error.message}`,
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET() {
+  try {
+    const allProducts = await db
+      .select()
+      .from(products)
+      .orderBy(desc(products.id));
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Products fetched successfully",
+        data: allProducts,
+      },
+      { status: 200 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        success: false,
+        messagge: `Failed to get products: ${error.message}`,
       },
       { status: 500 }
     );
