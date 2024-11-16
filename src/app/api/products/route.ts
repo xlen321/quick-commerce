@@ -2,6 +2,7 @@
 import { db } from "@/db";
 import { products } from "@/db/schema";
 import { productSchema } from "@/validators/productSchema";
+import { desc } from "drizzle-orm";
 import { writeFile } from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import path from "node:path";
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
       buffer
     );
 
-    const newProduct = await db.insert(products).values({...validatedData.data, image: fileName}).returning({id: products.id});
+    const newProduct = (await db.insert(products).values({...validatedData.data, image: fileName}).returning({id: products.id}))[0];
 
     if (!newProduct) {
       return NextResponse.json({
@@ -62,5 +63,21 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
+  }
+}
+
+export async function GET() {
+  try {
+    const allProducts = await db.select().from(products).orderBy(desc(products.id));
+    return NextResponse.json({
+      success: true,
+      message: "Products fetched successfully",
+      data: allProducts
+    }, {status: 200});
+  } catch (error: any) {
+    return NextResponse.json({
+      success: false,
+      messagge: `Failed to get products: ${error.message}`
+    }, {status: 500});    
   }
 }
